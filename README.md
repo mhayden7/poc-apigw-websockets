@@ -37,4 +37,6 @@ The connect flow:
 The disconnect flow:
 ![Disconnection flow](Flow%20diagram%20-%20Disconnect.png)
 
+## Architecture
+![Architecture](./Architecture.png)
 
