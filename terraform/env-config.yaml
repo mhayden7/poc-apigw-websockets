@@ -1,0 +1,3 @@
+# AWS Configuration
+region: us-east-1
+project: poc-apigw-websockets

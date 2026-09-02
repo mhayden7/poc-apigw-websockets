@@ -40,4 +40,4 @@ terraform.rc
 **.tfstate.backup
 **.zip
 **.terraform/*
-env-config.yaml
+# env-config.yaml
