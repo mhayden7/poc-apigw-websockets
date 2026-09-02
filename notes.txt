@@ -1,0 +1,111 @@
+Application-Level Authorization: If you need to restrict what an authenticated user can 
+do (e.g., user A cannot send messages to room B), you must implement this logic inside your backend integration (Lambda function). 
+The backend can access the principalId and context variables returned by the $connect authorizer via $context.authorizer to make these decisions.
+
+
+Just the $connect route is enough. In fact, AWS API Gateway only allows you to attach a Lambda authorizer to the $connect route; 
+you cannot attach authorizers to other routes like $default or custom message routes. 
+
+Why $connect Only is Sufficient
+Because WebSocket connections are stateful, authorization is performed exactly once when the connection is established.  
+The $connect route protects the entire API. Once a client successfully passes the authorizer during the handshake, 
+the connection remains authenticated for its entire lifecycle.  Subsequent messages sent over that persistent connection 
+do not trigger the authorizer again. 
+
+
+AWS API Gateway WebSocket connections are subject to two specific timeouts that cannot be increased:
+
+Idle Connection Timeout: Connections are closed after 10 minutes of inactivity.  This can be reset by sending periodic ping/pong messages to keep the connection alive.
+Maximum Connection Duration: Connections are forcibly closed after a maximum of 2 hours, regardless of activity. 
+
+
+
+to connect:
+wscat -c wss://7ku6q0b221.execute-api.us-east-1.amazonaws.com/production/
+
+new connection:
+create a session_id (preferably a uuid)
+wscat -c "wss://jm4rk3w1mc.execute-api.us-east-1.amazonaws.com/production/$default?token=letmein&session_id=000000-0000-0000-000000"
+
+re-establish connection:
+use a uuid you already have. If the session was deleted at some point, you won't have any subscriptions
+wscat -c "wss://moot2oezp1.execute-api.us-east-1.amazonaws.com/production/$default?token=letmein&session_id=000000-0000-0000-000000"
+
+
+subscribe:
+{"action": "subscribe", "event_type": "data_breach", "session_id": "000000-0000-0000-000000"}
+
+publish:
+{"action": "publish", "event_type": "data_breach", "payload": "your_data_here"}
+
+
+send message:
+{"action": "sendmessage", "message": "hello, everyone!"}
+
+
+
+
+Yes, you can integrate an Amazon API Gateway WebSocket directly with an Amazon SQS queue 
+using an AWS Service integration.  This pattern allows WebSocket messages to be sent to an 
+SQS queue without an intermediate Lambda function, helping to manage traffic spikes and decouple the frontend from backend processing. 
+
+To implement this, you must configure the API Gateway integration with specific parameters to format the request correctly for the SQS API:
+
+Integration Type: Set to AWS. 
+Integration Method: Set to POST. 
+Integration URI: Constructed as arn:aws:apigateway:{region}:sqs:path/{account_id}/{queue_name}. 
+Request Templates: Use Velocity Template Language (VTL) to transform the JSON payload into the application/x-www-form-urlencoded format 
+            required by SQS, typically mapping the body to Action=SendMessage&MessageBody=$util.urlEncode($input.body). 
+IAM Permissions: The API Gateway execution role must have sqs:SendMessage permissions for the target queue. 
+For FIFO queues, you must also include MessageGroupId and MessageDeduplicationId in the request template to ensure 
+            message ordering and deduplication. This approach is commonly used in serverless architectures to buffer 
+            WebSocket messages for asynchronous processing by Lambda functions triggered by the SQS queue. 
+
+
+
+
+
+
+
+
+
+The lowest-code option is cachetools.cached + TTLCache — a single decorator line, no custom wrapper needed:
+
+import json
+from cachetools import cached, TTLCache
+
+# Module-level: persists across warm invocations
+@cached(cache=TTLCache(maxsize=128, ttl=300))  # 5 min TTL
+def fetch_data(key):
+    return expensive_api_call(key)  # your real logic here
+
+def handler(event, context):
+    return {"data": fetch_data(event["key"])}
+
+That's it. The TTLCache instance is created once at cold start; each entry auto-expires after ttl seconds. No manual timestamp checks, no time.monotonic() bookkeeping. 
+
+Why this works in Lambda:
+
+Module-level objects survive across warm invocations (the container isn't destroyed between calls)
+TTLCache handles expiry internally — stale entries are evicted on access
+maxsize bounds memory so you don't leak across a long-lived container 
+Install: add cachetools to your requirements.txt (or bundle it in your deployment zip). It's a tiny pure-Python package with no dependencies.
+
+If you want zero third-party deps, the minimal stdlib version is just a module-level dict:
+
+import time
+
+_cache = {}
+
+def handler(event, context):
+    key = event["key"]
+    now = time.monotonic()
+    if key in _cache:
+        value, expiry = _cache[key]
+        if now < expiry:
+            return {"data": value}
+    value = expensive_api_call(key)
+    _cache[key] = (value, now + 300)
+    return {"data": value}
+
+Both are "very low code" — pick cachetools if you can add the dependency, the dict version if you want zero external packages. 

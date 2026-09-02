@@ -1,0 +1,22 @@
+,,,,,,
+Index Name,Purpose,ID,,,,
+SessionByConnectionId,Get session by connection_id,GSI1,,,,
+SubscriptionsByEventType,Get subscriptions by event type,GSI2,,,,
+,,,,,,
+Event Object Field,Description,,,,,
+event_type,(Required),,,,,
+payload,(Required) json,,,,,
+date_time,(Requred) timestamp of the event,,,,,
+,,,,,,
+,,,,,,
+Entity,Patterns,PK,SK,Data Fields,GSI1PK,GSI2PK
+Session,"Put, Delete, Get by event_type",SESSION#,ID#<session_id>,"create_time, activity_time, connection_id, session_id",connection_id,
+Channel,"Put, Delete, Get by event_type",CHANNEL#,ID#<channel_id>,"filters[], create_time, subscription_count",,<event_type>
+Subscriptions,"Put, Delete, ",SESSION#<session_id>,EVENT_TYPE#<event_type>,"event_type, create_time",,EVENT_TYPE#<event_type>
+,,,,,,
+,,,,,,
+,,,,,,
+,,,,,,
+,,,,,,
+,,,,,,
+,,,,,,
